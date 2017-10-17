@@ -7,6 +7,8 @@ class Weapon{
     this.weight = obj.weight;
     this.description = obj.description;
     this.icon = obj.icon;
+    this.itemIcon = obj.itemIcon;
+    this.lootIcon = obj.lootIcon;
     this.type = obj.type;
     this.equipable = obj.equipable;
     this.minDamage = obj.minDamage;
@@ -15,5 +17,8 @@ class Weapon{
     this.nature = obj.nature;
     this.slot = obj.slot;
     this.wield = obj.wield;
+    this.isEquiped = false;
+    this.rarity = obj.rarity;
+    this.aditionalDmgTo = obj.aditionalDmgTo;
   }
 };

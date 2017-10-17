@@ -1,5 +1,10 @@
 'use strict';
 
+var upKey;
+var downKey;
+var leftKey;
+var rightKey;
+
 let renderer;
 let canvas;
 let target_sp;
@@ -12,6 +17,8 @@ let chest_inv = document.getElementById("container");
 let Dungeon;
 
 let player;
+
+let filter_gray;
 
 let sprite_map = [];
 let collision_map = [];
@@ -32,12 +39,30 @@ let step_count = 0;
 let gameIsPaused = false;
 
 // SOUNDS
-let alert_s, pl_hit, en_hit, fire_hit, curse_hit, dead, pl_dead, game_over, miss, bad_hit,
-    dooropened, doorclosed;
+let alert_s, pl_hit, en_hit, fire_hit, curse_hit, dead, pl_dead, game_over, miss, bad_hit, dooropened, doorclosed,
+    hit_collision, drop;
 
 let player_health, player_health_bg, pl_health_con = [];
 // PARTICLES
 let emitter, death_effect, destruct_wood;
+
+let aimLine = {
+  lineObj: undefined,
+  angle: undefined,
+  x1: undefined,
+  y1: undefined,
+  xo: undefined,
+  yo: undefined,
+  l: undefined
+};
+
+let equipedSprites = {
+  helm: undefined,
+  chest: undefined,
+  boots: undefined,
+  gloves: undefined,
+  main_hand: undefined
+}
 
 // KEYS
 let rKey, spaceKey;
@@ -46,10 +71,11 @@ let rKey, spaceKey;
 let isMage = false;
 let isWarrior = false;
 
-// let g = new PIXI.Graphics();
-let gr_map, gr_players, gr_items;
+let gr_map, gr_players, gr_items,
+    gr_playerItems, gr_loot_particles;
+
 // creating stage
-let stage = new Phaser.Game(608, 608, Phaser.AUTO, 'phaser-example', { preload: preload, create: create, update: update, render: render });
+let stage = new Phaser.Game(608, 608, Phaser.AUTO, 'main-scene', { preload: preload, create: create, update: update, render: render });
 
 // minimap
 let minimap = document.getElementById("minimap");

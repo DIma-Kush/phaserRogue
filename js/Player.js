@@ -14,6 +14,7 @@ class Player extends Tile{
     this.moveTimer;
     this.moveDelay = 45; // default - 85, fast - 45
     this.isDetected = false;
+    this.movePath = undefined;
 
     this.health = undefined;
     this.maxHealth = undefined;
@@ -22,7 +23,8 @@ class Player extends Tile{
     this.maxMagic = undefined;
 
     this.stat = {
-      dexterity: 20
+      dexterity: 20,
+      luck: 50
     }
 
     this.sign;
@@ -32,7 +34,14 @@ class Player extends Tile{
     this.inRangedCombat = false;
     this.activeWeapon = undefined;
 
-    this.inventory = [];
+    this.inventory = {
+      container: new Array(30),
+      maxLength: 30,
+      sorted : {
+        by: undefined,
+        order: undefined
+      }
+    };
 
     this.equiped = {
       main_hand: undefined,
@@ -42,10 +51,205 @@ class Player extends Tile{
       boots: undefined,
       waist: undefined,
       pants: undefined,
-      helm: undefined
-    }
+      helm: undefined,
+      shield: undefined
+    };
 
     this.hasActiveSigns = false;
+  }
+
+  hitCollision(target){
+    let damage = this.equiped["main_hand"].aditionalDmgTo.damage;
+    target.hp -= getRandomInt(damage.minDamage, damage.maxDamage);
+    hit_collision.play();
+    if(target.hp <= 0){
+      let z = collision_map.indexOf(target);
+      if(z != -1) {
+        collision_map.splice(z, 1);
+      }
+      target.name = "floor";
+      target.sprite.loadTexture("destr_wall");
+      grid.setWalkableAt(target.x/32, target.y/32, true);
+      target.structureType = undefined;
+      cmArr[target.x/32][target.y/32] = undefined;
+      smArr[target.x/32][target.y/32] = target;
+    }
+    this.doStep();
+  }
+
+  detectCollision(pX, pY){
+    let col_wall = true;
+    let col_enemy = true;
+
+    for(let i = 0; i < collision_map.length; i++){
+      if(collision_map[i] && collision_map[i].name == "collision" && pX == collision_map[i].x && pY == collision_map[i].y){
+        col_wall = false;
+        if(this.equiped["main_hand"].aditionalDmgTo && this.equiped["main_hand"].aditionalDmgTo.type == collision_map[i].structureType){
+          this.hitCollision(collision_map[i]);
+        }
+      }
+    }
+    for(let i = 0; i < enemies.length; i++){
+      if(pX == enemies[i].x && pY == enemies[i].y){
+        col_enemy = false;
+        this.hitTarget(enemies[i]);
+      }
+    }
+    return col_enemy + col_wall;
+  }
+
+  doStep(){
+    if (!gameIsPaused) {
+      if(this.name == "player"){
+        if ($(".warning").is(":visible"))
+          $(".warning").hide();
+
+          // move player to the next path section
+        // if ($(".wait").not(":visible"))
+        //   $(".wait").show();
+
+        for (let j = 0; j < doors.length; j++) {
+          if (this.x == doors[j].x && this.y == doors[j].y) {
+            doors[j].name = "door_closed";
+            doors[j].sprite.loadTexture("door_c");
+            doorclosed.play();
+          }
+        }
+
+        // this.sprite.x = path[i][0] * this.tile_size.w;
+        // this.sprite.y = path[i][1] * this.tile_size.h;
+        this.x = this.sprite.x;
+        this.y = this.sprite.y;
+        gr_playerItems.x = this.x;
+        gr_playerItems.y = this.y;
+
+        this.destroyProp();
+
+        for (let j = 0; j < doors.length; j++) {
+          if (this.x == doors[j].x && this.y == doors[j].y) {
+            doors[j].name = "door_opened";
+            doors[j].sprite.loadTexture("door_o");
+            dooropened.play();
+            // break;
+          }
+        }
+
+        for (let j = 0; j < lootArr.length; j++) {
+          if (this.x == lootArr[j].x && this.y == lootArr[j].y) {
+            if ($(".on-loot").not(":visible")) {
+              $(".on-loot").css("display", "block");
+              break;
+            }
+          } else if ($(".on-loot").is(":visible")) {
+            $(".on-loot").hide();
+          }
+        }
+
+        for (let j in lootArr) {
+          if(this.x != lootArr[j].x && this.y != lootArr[j].y){
+            $(".loot-container").hide();
+            $(".loot-items").empty();
+          }
+        }
+
+        this.setVisible();
+        this.doFOV();
+        this.centerCamera();
+        this.moved = true;
+      }
+
+      for (let j = 0; j < enemies.length; j++) {
+        let z = 0;
+        if (j == 0) {
+          en_priority = [];
+        }
+        let enemy = enemies[j];
+        enemy.counter = 1;
+        enemy.doFOV();
+        enemy.detectPlayer();
+        enemy.moved = false;
+
+        if (enemy.targetFound) {
+
+          en_priority.push(enemy);
+          if ($(".enemy-list img").length > 0)
+            $(".enemy-list").empty();
+
+          if ($(".warning").not(":visible"))
+            $(".warning").css("display", "block");
+          if ($(".wait").is(":visible"))
+            $(".wait").hide();
+
+          //  enemy portrait list
+          for (let z in en_priority) {
+            if (en_priority[z].portrait) {
+              $(".enemy-list").append($("<img/>", {
+                src: en_priority[z].portrait,
+                class: "enemy-list-ico",
+                id: "en-l-" + z
+              }));
+              $("#en-l-" + z).after("<div class='portrait-hp' style='width:" + en_priority[z].health * $("#en-l-" + z).width() / en_priority[z].maxHealth + "px'><div/>");
+            }
+          }
+
+          if (enemy.equiped["main_hand"].type == "melee") {
+            let epath = enemy.moveToPoint(player.x, player.y);
+
+            if (epath && enemy.counter < epath.length - 1) {
+              grid.setWalkableAt(enemy.x / enemy.tile_size.w, enemy.y / enemy.tile_size.h, true);
+
+              enemy.sprite.x = epath[enemy.counter][0] * enemy.tile_size.w;
+              enemy.sprite.y = epath[enemy.counter][1] * enemy.tile_size.h;
+              enemy.x = enemy.sprite.x;
+              enemy.y = enemy.sprite.y;
+
+              for (let j = 0; j < doors.length; j++) {
+                if (enemy.x == doors[j].x && enemy.y == doors[j].y) {
+                  doors[j].name = "door_opened";
+                  doors[j].sprite.loadTexture("door_o");
+                  dooropened.play();
+                }
+              }
+
+              enemy.destroyProp();
+
+              enemy.moved = true;
+
+              grid.setWalkableAt(enemy.x / enemy.tile_size.w, enemy.y / enemy.tile_size.h, false);
+              enemy.counter++;
+            }
+          }
+          if (!enemy.moved) {
+            enemy.hitTarget(player);
+          }
+        }
+      }
+    }
+    updateMiniMap();
+  }
+
+  destroyProp(){
+    for(let j = 0; j < this.fov.length; j++){
+      if(this.fov[j].name == "destructible" && this.fov[j].x == this.x && this.fov[j].y == this.y){
+
+        this.fov[j].sprite.loadTexture("destr_wood"+getRandomInt(1,3) ,0);
+        this.fov[j].name = "floor";
+        // let destr_dummy = new Tile(this.fov[j].x/this.fov[j].tile_size.w, this.fov[j].y/this.fov[j].tile_size.h, "destr_wood"+getRandomInt(1,3), "collision");
+
+        destruct_wood = stage.add.emitter(0, 0, 20);
+        destruct_wood.makeParticles('t_destr');
+        destruct_wood.gravity = 150;
+
+        // position the hit particles on destructible object
+        destruct_wood.x = this.fov[j].x + this.fov[j].tile_size.w/2;
+        destruct_wood.y = this.fov[j].y + this.fov[j].tile_size.h/2;
+        // start to draw destruction particles
+        destruct_wood.start(true, 250, null, 20);
+
+        let destr = stage.add.audio("destr"+getRandomInt(1,3));
+        destr.play();
+      }
+    }
   }
 
   getTotalArmorPoints(){
@@ -69,40 +273,97 @@ class Player extends Tile{
   }
 
   giveItem(item){
-    this.inventory.push(item);
+    for(let i = 0; i < this.inventory.container.length; i++){
+      if(!this.inventory.container[i]){
+        this.inventory.container[i] = item;
+        break;
+      }
+    }
     updateInvInfo();
   }
 
   equipItem(item){
     if(item.equipable){
       this.equiped[item.slot] = item;
-      if((item.type == "melee" || item.type == "ranged") && item.slot == "main_hand"){
+      if(item.slot == "main_hand"){
         this.activeWeapon = item;
       }
+      if(this.name == 'player'){
+        console.log(item.name);
+        item.isEquiped = true;
 
-      // updateUI
-      if(this.name == "player" && item.type == "armor")
-        $("#"+item.slot).css("background", "url("+item.icon+")").css("background-color", "#009688");
-      if((item.type == "melee" || item.type == "ranged") && this.name === "player"){
-        $("#"+item.slot).css("background", "url("+item.icon+")").css("background-color", "#009688");
+        if(equipedSprites[item.slot])
+          gr_playerItems.remove(equipedSprites[item.slot]);
+        let eqIt = alignEquipedItems(item);
+        equipedSprites[item.slot] = gr_playerItems.create(eqIt.x, eqIt.y, item.itemIcon);
+
       }
+      // updateUI (inventory)
+      updateInvInfo();
+    }
+  }
+
+  toggleEquiped(item){
+    if(item.equipable){
+      item.isEquiped = item.isEquiped ? false : true;
+      if(!item.isEquiped){
+        this.equiped[item.slot] = undefined;
+        gr_playerItems.remove(equipedSprites[item.slot]);
+      }else{
+        if(equipedSprites[item.slot])
+          gr_playerItems.remove(equipedSprites[item.slot]);
+        let eqIt = alignEquipedItems(item);
+        equipedSprites[item.slot] = gr_playerItems.create(eqIt.x, eqIt.y, item.itemIcon);
+
+        this.equiped[item.slot] = item;
+        for(let i = 0; i < this.inventory.container.length; i++){
+          if(this.inventory.container[i] && item.slot == this.inventory.container[i].slot){
+            this.inventory.container[i].isEquiped = false;
+          }
+        }
+        item.isEquiped = true;
+      }
+      updateInvInfo();
+      $("#pl-arm").text("+"+player.getTotalArmorPoints());
     }
   }
 
   lootItems(){
+    let self = this;
     if(!this.disableControl){
       for(let i = 0; i < lootArr.length; i++){
         if(this.x == lootArr[i].x && this.y == lootArr[i].y){
-          for(let j in lootArr[i].loot){
-            this.giveItem(lootArr[i].loot[j]);
-          }
-          updateInvInfo();
+          this.giveItem(lootArr[i].loot);
           lootArr[i].sprite.destroy();
           lootArr.splice(i, 1);
           if($(".on-loot").is(":visible")) $(".on-loot").hide();
         }
       }
     }
+  }
+
+  getRandomLoot(){
+    let loot = [];
+    let itemsToLoot = []; // index of items to loot
+    let totalToLoot = getRandomInt(1, Object.keys(this.equiped).length); // total number of looted items
+    itemsToLoot.push(getRandomInt(1, totalToLoot));
+    let currentLoot = undefined;
+
+    while(itemsToLoot.length < totalToLoot){
+      currentLoot = getRandomInt(1, totalToLoot);
+      if(!itemsToLoot.includes(currentLoot))
+        itemsToLoot.push(currentLoot);
+    }
+
+    let i = 0;
+    for(let currentLoot in this.equiped){
+      i++;
+      if(itemsToLoot.includes(i) && this.equiped[currentLoot]){
+        this.equiped[currentLoot].isEquiped = false;
+        loot.push(Object.assign({}, this.equiped[currentLoot]));
+      }
+    }
+    return loot;
   }
 
   centerCamera(){
@@ -141,8 +402,32 @@ class Player extends Tile{
     }
   }
 
+  initAimMode(){
+    aimLine.l = 64;
+    aimLine.xo = this.x + 16;
+    aimLine.yo = this.y + 16;
+    aimLine.angle = 45*Math.PI/180;
+
+    aimLine.x1 = aimLine.xo + Math.cos(aimLine.angle)*aimLine.l;
+    aimLine.y1 = aimLine.yo + Math.sin(aimLine.angle)*aimLine.l;
+    aimLine.lineObj = new Phaser.Line(aimLine.xo, aimLine.yo, aimLine.x1, aimLine.y1);
+    let coord = [];
+    aimLine.lineObj.coordinatesOnLine(8, coord);
+
+    let cm = cmArr[Math.floor(aimLine.xo/this.tile_size.w)][Math.floor(aimLine.yo/this.tile_size.h)];
+    if(cm && cm.name == "collision"){
+
+    }
+
+  }
+
+  takeEffect(){
+
+  }
+
   checkHitAvailability(target){
-    if(this.activeWeapon.type == "melee" && this.activeWeapon.manaCost <= this.magic){
+    let eqWeap = this.equiped["main_hand"];
+    if(eqWeap && eqWeap.type == "melee" && eqWeap.manaCost <= this.magic){
       if(((target.sprite.x == this.sprite.x) && (target.sprite.y == this.sprite.y + this.tile_size.h))||                    // target is on top
          ((target.sprite.x == this.sprite.x) && (target.sprite.y == this.sprite.y - this.tile_size.h))||                    // target is on bottom
          ((target.sprite.y == this.sprite.y) && (target.sprite.x == this.sprite.x - this.tile_size.h))||                    // target is on left
@@ -157,7 +442,7 @@ class Player extends Tile{
       else{
         return false;
       }
-    }else if(this.activeWeapon.type == "ranged" && this.activeWeapon.manaCost <= this.magic){
+    }else if(eqWeap.type == "ranged" && eqWeap.manaCost <= this.magic){
       if(this.rangedR*this.tile_size.w >= Math.sqrt((target.sprite.x - this.sprite.x)*(target.sprite.x - this.sprite.x) + (target.sprite.y - this.sprite.y)*(target.sprite.y - this.sprite.y))){
         return true;
       }else{
@@ -178,11 +463,11 @@ class Player extends Tile{
       emitter.x = target.sprite.x + target.tile_size.w/2;
       emitter.y = target.sprite.y + target.tile_size.h/2;
 
-      // start to draw melee particles
+      // start to draw hit particles
       emitter.start(true, 800, null, 5);
 
       // calculating weapon damage
-      let damage = getRandomInt(this.activeWeapon.minDamage, this.activeWeapon.maxDamage);
+      let damage = getRandomInt(this.equiped["main_hand"].minDamage, this.equiped["main_hand"].maxDamage);
 
       // calculating damage multiplier
       let d_mult = 1 - 0.06 * target.getTotalArmorPoints()/(1 + (0.06*target.getTotalArmorPoints()));
@@ -190,7 +475,7 @@ class Player extends Tile{
       // calculating final damage dealt to the target
       damage = Math.floor(damage * d_mult);
 
-      switch (this.activeWeapon.nature) {
+      switch (this.equiped["main_hand"].nature) {
         case "fire":
           fire_hit.play();
         break;
@@ -209,7 +494,7 @@ class Player extends Tile{
       }
 
       // recalculating players magic points relative to mana cost of the used weapon
-      this.magic = this.magic - this.activeWeapon.manaCost;
+      this.magic = this.magic - this.equiped["main_hand"].manaCost;
 
       // calculating hit/miss rates relative to target's dexterity stat
       if(getRandomInt(1,100) > target.stat.dexterity) {
@@ -219,7 +504,7 @@ class Player extends Tile{
       } else {
         // target is missed
         miss.play();
-        updateLog("["+this.hero_name + "] misses ["+target.hero_name+"] with [" + this.activeWeapon.name + "]");
+        updateLog("["+this.hero_name + "] misses ["+target.hero_name+"] with [" + this.equiped["main_hand"].name + "]");
       }
 
       if(target.name == "enemy"){
@@ -231,7 +516,7 @@ class Player extends Tile{
 
       // if current hit was fatal
       if(target.health <= 0){
-        updateLog("["+this.hero_name + "] kills ["+target.hero_name+"] with [" + this.activeWeapon.name + "]");
+        updateLog("["+this.hero_name + "] kills ["+target.hero_name+"] with [" + this.equiped["main_hand"].name + "]");
 
         // death of the hero player
         if(target.name == "player"){
@@ -244,21 +529,16 @@ class Player extends Tile{
         }else{
           // death of other stuff (like enemies)
 
-          // spawn loot
-          let loot_chest = new Chest(target.x/this.tile_size.w, target.y/this.tile_size.h, 3, "loot", "loot", {
-            iron_sword,
-            iron_boots
-          });
-          loot_chest.state = 2;
-          detectStateChange(loot_chest);
-          lootArr.push(loot_chest);
-
-          this.fov.push(loot_chest);
-
           // target.sprite.destroy();
           gr_players.remove(target.sprite);
           dead.play();
           grid.setWalkableAt(target.x/target.tile_size.w, target.y/target.tile_size.h, true);
+
+          // spawn loot
+          if(getRandomInt(0, 100) <= this.stat.luck){
+            let generatedLoot = target.getRandomLoot();
+            scanAreaForLootSpawn(target.x, target.y, generatedLoot.length, generatedLoot, target);
+          }
 
           for(let z in en_priority){
             if(en_priority[z].portrait && en_priority[z].health <= 0){
@@ -277,7 +557,7 @@ class Player extends Tile{
 
       // count current hit attempt as step
       if(this.name == "player")
-        doStep(false);
+        player.doStep();
 
     }
 
@@ -358,6 +638,10 @@ class Player extends Tile{
         if(this.name == "enemy"){
           if(sm && sm.name){
             this.fov.push(sm);
+            this.fov = unique(this.fov);
+          }
+          if(cm && cm.name == "destructible"){
+            this.fov.push(cm);
             this.fov = unique(this.fov);
           }
         }

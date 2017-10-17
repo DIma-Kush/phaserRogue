@@ -1,7 +1,13 @@
 function preload() {
+    // filter grey
+    // stage.load.script('gray', '../js/filters/Gray.js');
+
     // SPRITSHEET
     // player walk animation
-    stage.load.spritesheet('mc_player', './images/player_walk.png', 32, 32);
+    // stage.load.spritesheet('mc_player', './images/player_walk.png', 32, 32)
+
+    // PLAYER SPRITE
+    stage.load.image('pl', "./images/player.png");
 
     // SPRITES
     stage.load.image('t_floor', './images/test_floor.png');
@@ -14,19 +20,36 @@ function preload() {
     stage.load.image('dummy', './images/test_dragon.png');
     stage.load.image("path_end", "./images/path_end.png")
     stage.load.image('t_alert', "./images/alert.png");
-
-    // particles
-    stage.load.image("t_hit", "./images/hit_particle.png");
-    stage.load.image("t_destr", "./images/destr_particle.png");
-    stage.load.image("pl_dead", "./images/pl_dead.png");
-
-    stage.load.image("loot", "./images/loot.png");
     stage.load.image("skeleton", "./images/skeleton.png");
     stage.load.image("skeleton2", "./images/skeleton_2.png");
     stage.load.image("dark_wizard", "./images/dark_wizard.png");
     stage.load.image("door_c", "./images/door_c.png");
     stage.load.image("door_o", "./images/door_o.png");
     stage.load.image("loot", "./images/loot.png");
+
+    //loot drop sprites
+    stage.load.image("d_bone_fist", "./images/icons/weapon/skeleton_hand.png");
+    stage.load.image("d_rusty_sword", "./images/icons/weapon/rusty_sword.png");
+    stage.load.image("d_iron_boots", "./images/icons/armor/iron_boots.png");
+    stage.load.image("d_wooden_shield", "./images/icons/armor/wooden_shield.png");
+    stage.load.image("d_scroll", "./images/icons/weapon/scroll_white.png");
+    stage.load.image("d_claw", "./images/icons/weapon/claw.png");
+    stage.load.image("d_wand_black", "./images/icons/weapon/wand_of_curse.png")
+
+    // ON SCENE ITEMS
+    stage.load.image('pl_iron_helmet', "./images/icons/scene/armor/iron/iron_helmet.png");
+    stage.load.image('pl_iron_boots', "./images/icons/scene/armor/iron/iron_boots.png");
+    stage.load.image('pl_iron_chest', "./images/icons/scene/armor/iron/iron_chest.png");
+    stage.load.image('pl_iron_sword', "./images/icons/scene/weapon/iron/iron_sword.png");
+    stage.load.image('pl_iron_pickaxe', "./images/icons/scene/weapon/iron/iron_pickaxe.png");
+    stage.load.image('pl_rusty_sword', "./images/icons/scene/weapon/iron/rusty_sword.png");
+    stage.load.image('pl_staff', "./images/icons/scene/weapon/staff/staff.png");
+    stage.load.image('pl_wooden_shield', "./images/icons/scene/armor/wood/wooden_shield.png");
+
+    // particles
+    stage.load.image("t_hit", "./images/hit_particle.png");
+    stage.load.image("t_destr", "./images/destr_particle.png");
+    stage.load.image("pl_dead", "./images/pl_dead.png");
 
     // destructible
     stage.load.image("barrel_wood1", "./images/barrel_wood1.png");
@@ -38,6 +61,7 @@ function preload() {
     stage.load.image("destr_wood1", "./images/destr_wood1.png");
     stage.load.image("destr_wood2", "./images/destr_wood2.png");
     stage.load.image("destr_wood3", "./images/destr_wood3.png");
+    stage.load.image("destr_wall", "./images/destr_wall.png")
 
     //AUDIO
     stage.load.audio('game_over', "./sound/ascending.mp3");
@@ -52,6 +76,8 @@ function preload() {
     stage.load.audio('bad_hit', "./sound/bad_hit.wav");
     stage.load.audio('dooropened', "./sound/dooropened.wav");
     stage.load.audio('doorclosed', "./sound/doorclosed.wav");
+    stage.load.audio('hit_collision', "./sound/hit-collision.wav");
+    stage.load.audio('drop', "./sound/drop.wav");
 
     // destruction audio
     stage.load.audio('destr1', "./sound/destr1.wav");
@@ -61,13 +87,20 @@ function preload() {
 
 
 function create() {
+
+    // filter_gray = stage.add.filter('Gray');
     grid = new PF.Grid(Dungeon.map_size, Dungeon.map_size);
 
     stage.world.setBounds(-Dungeon.map_size*32, -Dungeon.map_size*32, Dungeon.map_size*32*4, Dungeon.map_size*32*4);
 
     gr_map = stage.add.group();
     gr_items = stage.add.group();
+    gr_loot_particles = stage.add.group();
     gr_players = stage.add.group();
+
+
+    // all items that are visible on the player model
+    gr_playerItems = stage.add.group();
 
 
     Dungeon.init();
@@ -91,14 +124,6 @@ function create() {
       }
     }
 
-    for(let i in sprite_map){
-      all_sprites.push(sprite_map[i]);
-    }
-    for(let i in collision_map){
-      all_sprites.push(collision_map[i]);
-    }
-
-
     // // SOUNDS
     alert_s = stage.add.audio('alert');
     en_hit = stage.add.audio('en_hit');
@@ -112,19 +137,53 @@ function create() {
     game_over = stage.add.audio('game_over');
     dooropened = stage.add.audio('dooropened');
     doorclosed = stage.add.audio('doorclosed');
+    hit_collision = stage.add.audio('hit_collision');
+    drop = stage.add.audio('drop');
 
     // target_sp = new Phaser.Sprite();
     // stage.add.sprite(target_sp);
 
+    for(let i in sprite_map){
+      all_sprites.push(sprite_map[i]);
+    }
+    for(let i in collision_map){
+      all_sprites.push(collision_map[i]);
+    }
+
     // // ITEMS
     // WEAPONS
     // name, price, weight, description, icon, damage, type, mana cost, equipable
+
+    let pickaxeOfPower = new Weapon({
+      name: "Pickaxe of Power",
+      price: 500,
+      weight: 3,
+      description: "Holy s**t, you can break walls with this!",
+      icon: "./images/icons/weapon/pickaxe.png",
+      itemIcon: "pl_iron_pickaxe",
+      minDamage: 4,
+      maxDamage: 8,
+      type: "melee",
+      manaCost: 0,
+      nature: "default",
+      equipable: true,
+      slot: "main_hand",
+      rarity: 3,
+      aditionalDmgTo: {
+        type: "wall",
+        damage: {
+          minDamage: 25,
+          maxDamage: 45
+        }
+      }
+    });
+
     let dragon_claws = new Weapon({
       name: "Dragon Claws",
       price: 0,
       weight: 0,
       description: "These are very sharp",
-      icon: undefined,
+      icon: "./images/icons/weapom/claw.png",
       minDamage: 7,
       maxDamage: 10,
       type: "melee",
@@ -139,7 +198,8 @@ function create() {
       price: 0,
       weight: 0,
       description: "Skeletons have these",
-      icon: undefined,
+      icon: "./images/icons/weapon/skeleton_hand.png",
+      lootIcon: "d_bone_fist",
       minDamage: 1,
       maxDamage: 3,
       type: "melee",
@@ -155,6 +215,7 @@ function create() {
       weight: 0,
       description: "Regular iron sword for killing stuff",
       icon: "./images/icons/weapon/iron_sword.png",
+      itemIcon: "pl_iron_sword",
       minDamage: 10,
       maxDamage: 15,
       type: "melee",
@@ -169,7 +230,9 @@ function create() {
       price: 0,
       weight: 0,
       description: "Ancient sword covered with rust",
-      icon: undefined,
+      icon: "./images/icons/weapon/rusty_sword.png",
+      itemIcon: "pl_rusty_sword",
+      lootIcon: "d_rusty_sword",
       minDamage: 3,
       maxDamage: 6,
       type: "melee",
@@ -180,18 +243,19 @@ function create() {
     });
 
     let fireball_sp = new Weapon({
-      name: "Sphere of Fire",
+      name: "Scroll of Fire",
       price: 0,
       weight: 0,
-      description: "Regular fireball",
-      icon: undefined,
+      description: "Regular fireball scroll",
+      icon: "./images/icons/weapon/scroll_white.png",
+      lootIcon: "d_scroll",
       minDamage: 13,
       maxDamage: 20,
       type: "ranged",
       manaCost: 1,
       nature: "fire",
       equipable: true,
-      slot: "off_hand"
+      slot: "main_hand"
     });
 
     let wand_of_curse = new Weapon({
@@ -199,7 +263,8 @@ function create() {
       price: 0,
       weight: 0,
       description: "Dark wizards make this at home",
-      icon: undefined,
+      icon: "./images/icons/weapon/wand_of_curse.png",
+      lootIcon: "d_wand_black",
       minDamage: 8,
       maxDamage: 10,
       type: "ranged",
@@ -218,33 +283,35 @@ function create() {
       minDamage: 20,
       maxDamage: 25,
       type: "ranged",
-      manaCost: 1,
+      manaCost: 0,
       nature: "fire",
-      equipable: "true",
+      equipable: true,
       slot: "main_hand"
     });
 
-    let scroll_of_fire = new Weapon({
-      name: "Scroll of Fire",
+    let staff_of_fire = new Weapon({
+      name: "Staff of Fire",
       price: 0,
       weight: 0,
-      description: "Old scroll",
-      icon: "./images/icons/weapon/scroll_white.png",
+      description: "Old staf",
+      icon: "./images/icons/weapon/staff.png",
+      itemIcon: "pl_staff",
       minDamage: 15,
       maxDamage: 23,
       type: "ranged",
       manaCost: 1,
       nature: "fire",
-      equipable: "true",
-      slot: "off_hand"
+      equipable: true,
+      slot: "main_hand"
     });
 
     // ARMOR
     // name, price, weight, description, icon, type, armorValue, equipable, slot
-    let iron_chest = new Armor("Iron chest", 0, 0, "Regular iron chest", "./images/icons/armor/iron_chest.png", "armor", 15, true, "chest");
-    iron_boots = new Armor("Iron boots", 0, 0, "Heavy stuff", "./images/icons/armor/iron_boots.png", "armor", 5, true, "boots")
+    let iron_chest = new Armor("Iron chest", 0, 0, "Regular iron chest", "./images/icons/armor/iron_chest.png", "armor", 15, true, "chest", "pl_iron_chest");
+    iron_boots = new Armor("Iron boots", 0, 0, "Heavy stuff", "./images/icons/armor/iron_boots.png", "armor", 5, true, "boots", "pl_iron_boots", "d_iron_boots");
     let magic_robe = new Armor("Leather robe", 0, 0, "Wizards rule", "n/a", "armor", 5, true, "chest");
     let magic_socks = new Armor("Magic socks", 0, 0, "Stinks alot", "n/a", "armor", 3, true, "boots");
+    let wooden_shield = new Armor("Wooden Shield", 35, 5, "Smells realy good", "./images/icons/armor/wooden_shield.png", "armor", 19, true, "shield", "pl_wooden_shield", "d_wooden_shield");
     // test
     let holy_plates = new Armor("Admin Admin", 0, 0, "Not for balance", "n/a", "armor", 80, true, "pants");
 
@@ -262,17 +329,26 @@ function create() {
         let parts = key.split(",");
         let x = parseInt(parts[0]);
         let y = parseInt(parts[1]);
-        player = new Player(x, y, 3, "pl_"+plClass, 4, "player", "Hero " + plClass);
+        player = new Player(x, y, 3, "pl", 4, "player", "Hero " + plClass);
+        gr_playerItems.x = player.x;
+        gr_playerItems.y = player.y;
         break;
       }
     }
 
     switch(plClass){
       case "warrior":
-        player.setHealth(50);
-        player.setMagic(5);
+        player.setHealth(500); // def: 50
+        player.setMagic(500); // def: 5
+        player.giveItem(iron_sword);
+        player.giveItem(staff_of_fire);
+        player.giveItem(iron_chest);
+        player.giveItem(iron_boots);
+        player.giveItem(wand_of_curse);
+        player.giveItem(pickaxeOfPower);
+        player.giveItem(wooden_shield);
+
         player.equipItem(iron_sword);
-        player.equipItem(scroll_of_fire);
         player.equipItem(iron_chest);
         player.equipItem(iron_boots);
         player.stat.dexterity = 15;
@@ -280,6 +356,11 @@ function create() {
       case "wizard":
         player.setHealth(25);
         player.setMagic(25);
+        player.giveItem(iron_sword);
+        player.giveItem(fireball_sp);
+        player.giveItem(magic_robe);
+        player.giveItem(magic_socks);
+
         player.equipItem(iron_sword);
         player.equipItem(fireball_sp);
         player.equipItem(magic_robe);
@@ -290,6 +371,20 @@ function create() {
         player.rangedR = 8;
       break;
     }
+
+    let plInv = $(".inventory");
+    for(let i = 0; i < player.inventory.maxLength; i++){
+      if(!player.inventory.container[i]){
+        player.inventory.container[i] == "";
+      }
+        plInv.append($("<div/>",{
+          class: "inv-tile",
+          id: "inv-"+i,
+          "data-index" : i
+        }));
+    }
+
+    updateInvInfo();
 
     $("#current-hp").text(player.health);
     $("#max-hp").text(player.maxHealth);
@@ -302,7 +397,7 @@ function create() {
     $("#pl-weapon").text(player.activeWeapon.name+" ["+player.activeWeapon.minDamage+"-"+player.activeWeapon.maxDamage+"]");
 
     $("#pl-dex").text(player.stat.dexterity);
-    $("#pl-arm").text(player.getTotalArmorPoints());
+    $("#pl-arm").text("+"+player.getTotalArmorPoints());
 
     for(let i = 0; i < 7; i++){
       let rand_pos = getRandomPos();
@@ -313,6 +408,8 @@ function create() {
       skeleton.setHealth(25);
       skeleton.setMagic(0);
       skeleton.equipItem(bone);
+      skeleton.equipItem(wooden_shield);
+      skeleton.equipItem(iron_boots);
       grid.setWalkableAt(skeleton.x/32, skeleton.y/32, false);
       // skeleton.addToStage();
     }
@@ -379,63 +476,227 @@ function create() {
     rKey = stage.input.keyboard.addKey(Phaser.Keyboard.R);
 
     rKey.onDown.add(function(){
-      player.changeActiveWeapon();
+      // player.changeActiveWeapon();
+      player.initAimMode();
     }, this);
 
-    spaceKey = stage.input.keyboard.addKey(Phaser.Keyboard.SPACEBAR);
+    /*
+    Phaser.Keyboard.NUMPAD_1
+    Phaser.Keyboard.NUMPAD_2
+    Phaser.Keyboard.NUMPAD_3
+    Phaser.Keyboard.NUMPAD_4
+    Phaser.Keyboard.NUMPAD_5
+    Phaser.Keyboard.NUMPAD_6
+    Phaser.Keyboard.NUMPAD_7
+    Phaser.Keyboard.NUMPAD_8
+    Phaser.Keyboard.NUMPAD_9
+    */
+
+    let bottomLeftKey = stage.input.keyboard.addKey(Phaser.Keyboard.NUMPAD_1);
+    let downKey = stage.input.keyboard.addKey(Phaser.Keyboard.NUMPAD_2);
+    let bottomRightKey = stage.input.keyboard.addKey(Phaser.Keyboard.NUMPAD_3);
+    let leftKey = stage.input.keyboard.addKey(Phaser.Keyboard.NUMPAD_4);
+    let rightKey = stage.input.keyboard.addKey(Phaser.Keyboard.NUMPAD_6);
+    let topLeftKey = stage.input.keyboard.addKey(Phaser.Keyboard.NUMPAD_7);
+    let upKey = stage.input.keyboard.addKey(Phaser.Keyboard.NUMPAD_8);
+    let topRightKey = stage.input.keyboard.addKey(Phaser.Keyboard.NUMPAD_9);
+    upKey.onDown.add(move, this);
+    downKey.onDown.add(move, this);
+    leftKey.onDown.add(move, this);
+    rightKey.onDown.add(move, this);
+    topLeftKey.onDown.add(move, this);
+    topRightKey.onDown.add(move, this);
+    bottomLeftKey.onDown.add(move, this);
+    bottomRightKey.onDown.add(move, this);
+
+    function move(e){
+      switch(e.event.code){
+        case "Numpad1":
+        if(player.detectCollision(player.sprite.x - player.tile_size.w, player.sprite.y + player.tile_size.w) == 2 && !player.disableControl){
+          player.sprite.x -= player.tile_size.w;
+          player.sprite.y += player.tile_size.w;
+          player.doStep();
+        }
+        break;
+        case "Numpad2":
+          if(player.detectCollision(player.sprite.x, player.sprite.y + player.tile_size.w) == 2 && !player.disableControl){
+            player.sprite.y += player.tile_size.w;
+            player.doStep();
+          }
+        break;
+        case "Numpad3":
+          if(player.detectCollision(player.sprite.x + player.tile_size.w, player.sprite.y + player.tile_size.w) == 2 && !player.disableControl){
+            player.sprite.x += player.tile_size.w;
+            player.sprite.y += player.tile_size.w;
+            player.doStep();
+          }
+        break;
+        case "Numpad4":
+          if(player.detectCollision(player.sprite.x - player.tile_size.w, player.sprite.y) == 2 && !player.disableControl){
+            player.sprite.x -= player.tile_size.w;
+            player.doStep();
+          }
+        break;
+        case "Numpad6":
+          if(player.detectCollision(player.sprite.x + player.tile_size.w, player.sprite.y) == 2 && !player.disableControl){
+            player.sprite.x += player.tile_size.w;
+            player.doStep();
+          }
+        break;
+        case "Numpad7":
+          if(player.detectCollision(player.sprite.x - player.tile_size.w, player.sprite.y - player.tile_size.w) == 2 && !player.disableControl){
+            player.sprite.x -= player.tile_size.w;
+            player.sprite.y -= player.tile_size.w;
+            player.doStep();
+          }
+        break;
+        case "Numpad8":
+          if(player.detectCollision(player.sprite.x, player.sprite.y - player.tile_size.w) == 2 && !player.disableControl){
+            player.sprite.y -= player.tile_size.w;
+            player.doStep();
+          }
+        break;
+        case "Numpad9":
+        if(player.detectCollision(player.sprite.x + player.tile_size.w, player.sprite.y - player.tile_size.w) == 2 && !player.disableControl){
+          player.sprite.x += player.tile_size.w;
+          player.sprite.y -= player.tile_size.w;
+          player.doStep();
+        }
+        break;
+      }
+    }
+
+    spaceKey = stage.input.keyboard.addKey(Phaser.Keyboard.G);
 
     spaceKey.onDown.add(function(){
-      player.lootItems();
+      if($(".on-loot").is(":visible"))
+        player.lootItems();
     }, this);
-    // player movement animation
-    // player.sprite.animations.add('left', [4, 5, 6, 7], 10, true);
-    // player.sprite.animations.add('right', [8, 9, 10, 11], 10, true);
-    // player.sprite.animations.add('up', [12, 13, 14, 15], 10, true);
-    // player.sprite.animations.add('down', [0, 1, 2, 3], 10, true);
-
-    let info = $(".info");
-    $(".slot").hover(function(){
-      let self = $(this);
-      let container;
-
-      if(self.parent().hasClass("slots")){
-        container = player.equiped[self.attr("id")];
-        for(let i in container){
-          if(i != "icon" && i != "equipable" && i)
-            info.append($("<span/>",{
-              text: i + ": " + container[i]
-            }));
-        }
-      }
-      if(self.parent().hasClass("inventory")){
-        container = player.inventory;
-        for(let i in container[self.data("num")]){
-          if(i != "icon" && i != "equipable" && i){
-            info.append($("<span/>",{
-              text: i + ": " + container[self.data("num")][i]
-            }));
-          }
-        }
-      }
-
-      info.show();
-
-    }, function(){
-      if(info.is(":visible")){
-        info.empty();
-        info.hide();
-      }
-    });
 
     updateMiniMap();
 
+    // -----------------
+    // CONTEXT MENU
+    // -----------------
+
+    $.contextMenu({
+      selector: '.inv-tile',
+      callback: function(key, options, $element) {
+          // var m = "clicked: " + key;
+          // window.console && console.log(m) || alert(m);
+      },
+      build: function($triggerElement, e){
+        if(player.inventory.container[$("#"+$triggerElement.context.id).data("index")]){
+        return {
+          callback: function(){},
+          items: {
+            "equip": {name: function($element){
+              return $("#"+$triggerElement.context.id).hasClass("isEquiped") ? "Unequip" : "Equip";
+            }, callback: function($element){
+              let elId = $triggerElement.context.id;
+              // let invId = elId.substr(elId.indexOf("-")+1, elId.length - elId.indexOf("-"));
+              player.toggleEquiped(player.inventory.container[$("#"+elId).data("index")]);
+            }},
+            "throw": {name: "Throw"},
+            "identify": {name: "Identify"},
+            "destroy": {name: "Destroy"}
+          }
+        };
+      }
+        else{
+        return false;
+        }
+      }
+    });
+
+    $(".inv-tile").hover(function(e){
+      let item = player.inventory.container[$(this).data("index")];
+      if(item){
+        $(".info").show();
+        $(".info").css("left", e.pageX+"px").css("top", e.pageY + "px");
+        $(".info p").html("");
+        $(".info .name").css("color", "#fff");
+        $(".info .name").html(item.name);
+        switch(item.rarity){
+          case 3:
+          $(".info .name").css("color", "#19d229");
+          break;
+        }
+        $(".info .type").html(item.type);
+        if(item.type == "melee" || item.type == "ranged"){
+          $(".info .misc").html("Damage: " + item.minDamage + "-" + item.maxDamage);
+        }
+        else if(item.type == "armor"){
+          $(".info .armor").html("+" + item.armorValue + " armor");
+        }
+      }
+    }, function(){
+      $(".info").hide();
+    });
+
+
+    // -----------------
+    // DRAG'N'DROP
+    // -----------------
+
+    $(".inv-tile").draggable({helper: "clone"});
+
+    $(".inv-tile").droppable({
+      accept: "div",
+      drop: function(event, ui){
+        let inv = player.inventory.container;
+        if(!inv[$(this).data("index")]){
+          inv[$(this).data("index")] = inv[$("#"+ui.helper.context.id).data("index")];
+          inv[$("#"+ui.helper.context.id).data("index")] = undefined;
+        }else if(inv[$(this).data("index")]){
+          let bufItemFrom = inv[$(this).data("index")];
+          let bufItemTo = inv[$("#"+ui.helper.context.id).data("index")];
+          inv[$(this).data("index")] = bufItemTo;
+          inv[$("#"+ui.helper.context.id).data("index")] = bufItemFrom;
+        }
+        updateInvInfo();
+      }
+    });
+
+    // -----------------
+    // INVENTORY SORT
+    // -----------------
+
+    $(".sort-by-name").on("click", function(){
+      sortInvByName();
+    });
+
+    // -----------------
+    // LOOT WINDOW
+    // -----------------
+
+    $(".loot-container .close").on("click", function(){
+      $(this).parent(".loot-container").hide();
+    });
 }
 
 function update(){
   emitter.forEachAlive(function(p){	p.tint = 0xCC1100; p.alpha = p.lifespan/emitter.lifespan; });
   // destruct_wood.forEachAlive(function(p){	p.tint = 0x633C14; p.alpha = p.lifespan/emitter.lifespan; });
   death_effect.forEachAlive(function(p){ p.tint = 0x333333; p.alpha = p.lifespan/emitter.lifespan; });
+  gr_loot_particles.forEachAlive(function(item){
+    if(!item.animComplete){
+      item.x = item.path[item.pi].x + 16;
+      item.y = item.path[item.pi].y + 16;
+      item.pi += 2; // default: 5
+      item.angle += 50;
+      if (item.pi >= item.path.length)
+      {
+        item.pi = 0;
+        item.animComplete = true;
+        item.angle = 0;
+      }
+    }
+  });
 }
 
 function render(){
+  // stage.debug.geom(aimLine.lineObj);
+  // if(aimLine.lineObj)
+  //   stage.debug.lineInfo(aimLine.lineObj, 32, 32);
 }
